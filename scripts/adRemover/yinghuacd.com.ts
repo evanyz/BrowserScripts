@@ -10,35 +10,34 @@
 // ==/UserScript==
 
 (async function() {
-  'use strict';
-  const LOOP_INTERVAL = 100 // ms
-  const MAX_TRY = 50
-  const ids = ['HMcoupletDivright', 'HMcoupletDivleft', 'HMRichBox']
+    'use strict';
+    const LOOP_INTERVAL = 100 // ms
+    const MAX_TRY = 50
+    const ids = ['HMcoupletDivright', 'HMcoupletDivleft', 'HMRichBox']
 
-  // Your code here...
-  const removeAd = () => {
-      let success = true
-      ids.forEach(id => {
-          const target = document.getElementById(id)
-          if (target) {
-              target.remove()
-          } else {
-              success = false
-          }
-      })
-      console.log("removeAd success!");
-      return success;
-  }
+    // Your code here...
+    const removeAd = () => {
+        let success = true
+        ids.forEach(id => {
+            const target = document.getElementById(id)
+            if (target) {
+                target.remove()
+            } else {
+                success = false
+            }
+        })
+        return success;
+    }
 
-  function sleep(ms) {
-      return new Promise(resolve => setTimeout(resolve, ms));
-  }
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
 
-  let success = false
-  let tryCount = MAX_TRY
-  while (!success && MAX_TRY > 0) {
-      success = removeAd()
-      await sleep(LOOP_INTERVAL)
-      tryCount--
-  }
+    let success = false
+    let tryCount = MAX_TRY
+    while (!success && tryCount > 0) {
+        success = removeAd()
+        await sleep(LOOP_INTERVAL)
+        tryCount--
+    }
 })();
