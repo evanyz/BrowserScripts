@@ -11,7 +11,7 @@
 
 (async function () {
   'use strict';
-  const LOOP_INTERVAL = 100 // ms
+  const LOOP_INTERVAL = 1000 // ms
   const SKIP_BTN_CLASS = 'ytp-ad-skip-button'
 
   // Your code here...
