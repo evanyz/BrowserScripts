@@ -39,11 +39,19 @@
         ? `https://www.pokemoncenter.com${linkElement.getAttribute("href")}`
         : null;
 
+      const imageElement = box.querySelector(
+        "img[class^='product-image-main--']"
+      );
+      const productImage = imageElement
+        ? imageElement.getAttribute("src")
+        : null; // Extract image source
+
       return {
         name: productName,
         inStock: !isOutOfStock,
         link: productLink, // Add the product link
         element: box, // Reference to the DOM element
+        image: productImage, // Add the product image
       };
     });
 
@@ -60,6 +68,7 @@
           : "New item available!",
       url: item.link, // Add the product link
       color: item.status === "Back In Stock" ? 0x00ff00 : 0x0000ff, // Green for back in stock, blue for new item
+      image: { url: item.image }, // Add the product image
     }));
 
     GM_xmlhttpRequest({
@@ -232,7 +241,7 @@
   // Function to check for updates
   const checkForUpdates = (products) => {
     products.forEach((product) => {
-      const { name, inStock, link } = product;
+      const { name, inStock, link, image } = product;
 
       if (isFirstRun) {
         // Initialize the tracked items on the first run
@@ -244,12 +253,12 @@
           // If stock status changed to in stock, add to notification list
           if (!previousStatus && inStock) {
             console.log(`Item back in stock: ${name}`);
-            itemsToNotify.push({ name, link, status: "Back In Stock" });
+            itemsToNotify.push({ name, link, image, status: "Back In Stock" });
           }
         } else {
           // New product detected
           console.log(`New item detected: ${name}`);
-          itemsToNotify.push({ name, link, status: "New Item" });
+          itemsToNotify.push({ name, link, image, status: "New Item" });
         }
 
         // Update the tracked items
