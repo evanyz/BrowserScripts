@@ -5,7 +5,7 @@
 // @description  Track product stock changes on Pokemon Center with debug buttons
 // @author       Your Name
 // @match        https://www.pokemoncenter.com/category/elite-trainer-box*
-// @grant        none
+// @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
 (function () {
@@ -16,6 +16,8 @@
   let isFirstRun = true; // Flag to indicate the first run
   const debugFakeItemName = "Fake Product";
   const period = 5000;
+  const discordWebhookUrl =
+    "https://discord.com/api/webhooks/1327545689533583442/LeqCAyb0vP66R6sZTbLvXxXfO1dquZN5TRN74JNqYrRh7qjBj9vD49HBuTXxGVb6Nig6";
 
   // Function to scrape product data
   const scrapeProducts = () => {
@@ -173,14 +175,55 @@
     return [...itemsToNotify];
   };
 
+  // Function to send a Discord message
+  const sendDiscordMessage = (content) => {
+    GM_xmlhttpRequest({
+      method: "POST",
+      url: discordWebhookUrl,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      data: JSON.stringify({
+        content, // The message content
+      }),
+      onload: (response) => {
+        if (response.status >= 200 && response.status < 300) {
+          console.log("Discord message sent successfully:", content);
+        } else {
+          console.error(
+            "Failed to send Discord message:",
+            response.status,
+            response.statusText
+          );
+        }
+      },
+      onerror: (error) => {
+        console.error("Error sending Discord message:", error);
+      },
+    });
+  };
+
   // Dummy notifyUsers function
-  const notifyUsers = (items) => {
+  const notifyUsers = async (items) => {
     if (items.length === 0) {
       console.log("No items to notify.");
       return;
     }
 
     console.log("Notifying users about these items: ", items.length, " items");
+
+    // Create a message content for Discord
+    const messageContent = items
+      .map(
+        (item) =>
+          `${item.name} is now ${
+            item.status === "Back In Stock" ? "in stock" : "available"
+          }`
+      )
+      .join("\n");
+
+    // Send the message to Discord
+    await sendDiscordMessage(messageContent);
 
     // Update the stock status in trackedItems to mark them as processed
     items.forEach((item) => {
