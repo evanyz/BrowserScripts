@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokemon Product Stock Tracker with Debug Buttons
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.9
 // @description  Track product stock changes on Pokemon Center with debug buttons
 // @author       Your Name
 // @match        https://www.pokemoncenter.com/category/elite-trainer-box*
@@ -34,14 +34,101 @@
       );
       const isOutOfStock = !!outOfStockElement;
 
+      const linkElement = box.querySelector("a");
+      const productLink = linkElement
+        ? `https://www.pokemoncenter.com${linkElement.getAttribute("href")}`
+        : null;
+
       return {
         name: productName,
         inStock: !isOutOfStock,
+        link: productLink, // Add the product link
         element: box, // Reference to the DOM element
       };
     });
 
     return products;
+  };
+
+  // Function to send a Discord message
+  const sendDiscordMessage = (items) => {
+    const embeds = items.map((item) => ({
+      title: item.name,
+      description:
+        item.status === "Back In Stock"
+          ? "Back in stock!"
+          : "New item available!",
+      url: item.link, // Add the product link
+      color: item.status === "Back In Stock" ? 0x00ff00 : 0x0000ff, // Green for back in stock, blue for new item
+    }));
+
+    GM_xmlhttpRequest({
+      method: "POST",
+      url: discordWebhookUrl,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      data: JSON.stringify({
+        embeds, // Send embeds for structured messages
+      }),
+      onload: (response) => {
+        if (response.status >= 200 && response.status < 300) {
+          console.log("Discord message sent successfully for items:", items);
+        } else {
+          console.error(
+            "Failed to send Discord message:",
+            response.status,
+            response.statusText
+          );
+        }
+      },
+      onerror: (error) => {
+        console.error("Error sending Discord message:", error);
+      },
+    });
+  };
+
+  // Function to notify users
+  const notifyUsers = async (items) => {
+    if (items.length === 0) {
+      console.log("No items to notify.");
+      return;
+    }
+
+    console.log("Notifying users about these items: ", items.length, " items");
+
+    // Send the message to Discord
+    await sendDiscordMessage(items);
+
+    // Update the stock status in trackedItems to mark them as processed
+    items.forEach((item) => {
+      trackedItems.set(item.name, true); // Assume item is now in stock after notification
+      console.log(`Marked ${item.name} as processed in trackedItems.`);
+    });
+
+    // Clear itemsToNotify after processing
+    itemsToNotify.length = 0;
+  };
+
+  // Function to perform periodic scans
+  const runPeriodicScan = () => {
+    console.log("Starting a new scan...");
+    const products = scrapeProducts();
+    console.log("products length, ", products.length);
+    console.log("trackedItems length, ", trackedItems.size);
+    const itemsToNotifyThisRound = checkForUpdates(products);
+
+    if (!isFirstRun) {
+      console.log("Items to Notify:", itemsToNotifyThisRound);
+
+      // Call the notifyUsers function to process itemsToNotify
+      notifyUsers(itemsToNotifyThisRound);
+    } else {
+      console.log("First run: Initializing stock status...");
+      isFirstRun = false;
+    }
+
+    setTimeout(runPeriodicScan, period);
   };
 
   // Function to toggle the stock status of the first item in the map
@@ -145,9 +232,7 @@
   // Function to check for updates
   const checkForUpdates = (products) => {
     products.forEach((product) => {
-      const { name, inStock } = product;
-
-      // console.log("Processing product:", name, "In stock:", inStock);
+      const { name, inStock, link } = product;
 
       if (isFirstRun) {
         // Initialize the tracked items on the first run
@@ -159,12 +244,12 @@
           // If stock status changed to in stock, add to notification list
           if (!previousStatus && inStock) {
             console.log(`Item back in stock: ${name}`);
-            itemsToNotify.push({ name, status: "Back In Stock" });
+            itemsToNotify.push({ name, link, status: "Back In Stock" });
           }
         } else {
           // New product detected
           console.log(`New item detected: ${name}`);
-          itemsToNotify.push({ name, status: "New Item" });
+          itemsToNotify.push({ name, link, status: "New Item" });
         }
 
         // Update the tracked items
@@ -173,87 +258,6 @@
     });
 
     return [...itemsToNotify];
-  };
-
-  // Function to send a Discord message
-  const sendDiscordMessage = (content) => {
-    GM_xmlhttpRequest({
-      method: "POST",
-      url: discordWebhookUrl,
-      headers: {
-        "Content-Type": "application/json",
-      },
-      data: JSON.stringify({
-        content, // The message content
-      }),
-      onload: (response) => {
-        if (response.status >= 200 && response.status < 300) {
-          console.log("Discord message sent successfully:", content);
-        } else {
-          console.error(
-            "Failed to send Discord message:",
-            response.status,
-            response.statusText
-          );
-        }
-      },
-      onerror: (error) => {
-        console.error("Error sending Discord message:", error);
-      },
-    });
-  };
-
-  // Dummy notifyUsers function
-  const notifyUsers = async (items) => {
-    if (items.length === 0) {
-      console.log("No items to notify.");
-      return;
-    }
-
-    console.log("Notifying users about these items: ", items.length, " items");
-
-    // Create a message content for Discord
-    const messageContent = items
-      .map(
-        (item) =>
-          `${item.name} is now ${
-            item.status === "Back In Stock" ? "in stock" : "available"
-          }`
-      )
-      .join("\n");
-
-    // Send the message to Discord
-    await sendDiscordMessage(messageContent);
-
-    // Update the stock status in trackedItems to mark them as processed
-    items.forEach((item) => {
-      trackedItems.set(item.name, true); // Assume item is now in stock after notification
-      console.log(`Marked ${item.name} as processed in trackedItems.`);
-    });
-
-    // Clear itemsToNotify after processing
-    itemsToNotify.length = 0;
-  };
-
-  // Function to perform periodic scans
-  const runPeriodicScan = () => {
-    console.log("Starting a new scan...");
-    const products = scrapeProducts();
-    console.log("products length, ", products.length);
-    console.log("trackedItems length, ", trackedItems.size);
-    const itemsToNotifyThisRound = checkForUpdates(products);
-
-    if (!isFirstRun) {
-      console.log("Items to Notify:", itemsToNotifyThisRound);
-
-      // Call the dummy notifyUsers function to process itemsToNotify
-      notifyUsers(itemsToNotifyThisRound);
-    } else {
-      console.log("First run: Initializing stock status...");
-      isFirstRun = false;
-    }
-
-    setTimeout(runPeriodicScan, period);
   };
 
   // Initial run
