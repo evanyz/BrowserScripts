@@ -13,16 +13,20 @@
   'use strict';
   const LOOP_INTERVAL = 1000 // ms
   const SKIP_BTN_CLASS = 'ytp-ad-skip-button'
+  const CLOSE_AD_OVERLAY_BTN_CLASS = 'ytp-ad-overlay-close-button'
 
   // Your code here...
   const detectAndSkip = () => {
-    const targets = document.getElementsByClassName(SKIP_BTN_CLASS)
-    if (targets) {
-      for (let i = 0; i < targets.length; i++) {
-        const target = targets[i]
-        target.click()
+    const classes = [SKIP_BTN_CLASS, CLOSE_AD_OVERLAY_BTN_CLASS]
+    classes.forEach(cn => {
+      const targets = document.getElementsByClassName(cn)
+      if (targets) {
+        for (let i = 0; i < targets.length; i++) {
+          const target = targets[i]
+          target.click()
+        }
       }
-    }
+    })
   }
 
   function sleep(ms) {

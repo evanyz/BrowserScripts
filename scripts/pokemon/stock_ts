@@ -1,0 +1,222 @@
+// ==UserScript==
+// @name         Pokemon Product Stock Tracker with Debug Buttons
+// @namespace    http://tampermonkey.net/
+// @version      1.8
+// @description  Track product stock changes on Pokemon Center with debug buttons
+// @author       Your Name
+// @match        https://www.pokemoncenter.com/category/elite-trainer-box*
+// @grant        none
+// ==/UserScript==
+
+(function () {
+  "use strict";
+
+  const trackedItems = new Map(); // Stores the current stock status of items
+  const itemsToNotify = []; // Stores new items or items that became in stock
+  let isFirstRun = true; // Flag to indicate the first run
+  const debugFakeItemName = "Fake Product";
+  const period = 5000;
+
+  // Function to scrape product data
+  const scrapeProducts = () => {
+    let productBoxes = document.querySelectorAll("div[class^='product-box--']");
+
+    let products = Array.from(productBoxes).map((box) => {
+      const titleElement = box.querySelector("h1[class^='product-title--']");
+      const productName = titleElement
+        ? titleElement.textContent.trim()
+        : "Unknown Product";
+
+      const outOfStockElement = box.querySelector(
+        "div[class^='product-image-oos--']"
+      );
+      const isOutOfStock = !!outOfStockElement;
+
+      return {
+        name: productName,
+        inStock: !isOutOfStock,
+        element: box, // Reference to the DOM element
+      };
+    });
+
+    return products;
+  };
+
+  // Function to toggle the stock status of the first item in the map
+  const toggleFirstItem = () => {
+    const firstItem = Array.from(trackedItems.keys())[0];
+    if (firstItem) {
+      const currentStatus = trackedItems.get(firstItem);
+      trackedItems.set(firstItem, !currentStatus); // Toggle the status
+      console.log(
+        `Toggled stock status for: ${firstItem} - Now: ${
+          !currentStatus ? "In Stock" : "Out of Stock"
+        }`
+      );
+    } else {
+      console.log("No items to toggle in trackedItems.");
+    }
+  };
+
+  // Function to add a fake new item by cloning the first item's DOM
+  const addFakeItem = () => {
+    const grid = document.querySelector("div[class^='category-products-grid']");
+    if (grid) {
+      const firstItem = grid.querySelector("div[class^='product--']");
+      if (firstItem && !trackedItems.has(debugFakeItemName)) {
+        // Clone the first item's DOM
+        const clonedItem = firstItem.cloneNode(true);
+
+        // Update the cloned item's title
+        const titleElement = clonedItem.querySelector(
+          "h1[class^='product-title--']"
+        );
+        if (titleElement) {
+          titleElement.textContent = debugFakeItemName; // Set the fake title
+        }
+
+        // Optional: Update other properties like price or image (if needed)
+        const priceElement = clonedItem.querySelector(
+          "div[class^='product-price--']"
+        );
+        if (priceElement) {
+          priceElement.textContent = "$0.00"; // Set a fake price
+        }
+
+        // Add the cloned item to the grid
+        grid.appendChild(clonedItem);
+
+        // Add the fake item to trackedItems
+        console.log(`Added fake item: ${debugFakeItemName}`);
+      } else {
+        console.log("Fake item already exists or no items found to clone.");
+      }
+    } else {
+      console.log("Product grid not found on the page.");
+    }
+  };
+
+  // Function to remove the fake item
+  const removeFakeItem = () => {
+    const grid = document.querySelector("div[class^='category-products-grid']");
+    const fakeItem = Array.from(
+      grid?.querySelectorAll("div.product-box--fake") || []
+    )[0];
+    if (fakeItem && trackedItems.has(debugFakeItemName)) {
+      fakeItem.remove(); // Remove from DOM
+      trackedItems.delete(debugFakeItemName); // Remove from trackedItems
+      console.log(`Removed fake item: ${debugFakeItemName}`);
+    } else {
+      console.log("No fake item found to remove.");
+    }
+  };
+
+  // Add debug buttons to the page
+  const addDebugButtons = () => {
+    const buttonContainer = document.createElement("div");
+    buttonContainer.style.position = "fixed";
+    buttonContainer.style.bottom = "10px";
+    buttonContainer.style.left = "10px";
+    buttonContainer.style.backgroundColor = "white";
+    buttonContainer.style.border = "1px solid black";
+    buttonContainer.style.padding = "10px";
+    buttonContainer.style.zIndex = "9999";
+
+    const toggleButton = document.createElement("button");
+    toggleButton.textContent = "Toggle First Item";
+    toggleButton.onclick = toggleFirstItem;
+
+    const addButton = document.createElement("button");
+    addButton.textContent = "Add Fake Item";
+    addButton.onclick = addFakeItem;
+
+    const removeButton = document.createElement("button");
+    removeButton.textContent = "Remove Fake Item";
+    removeButton.onclick = removeFakeItem;
+
+    buttonContainer.appendChild(toggleButton);
+    buttonContainer.appendChild(addButton);
+    buttonContainer.appendChild(removeButton);
+    document.body.appendChild(buttonContainer);
+  };
+
+  // Function to check for updates
+  const checkForUpdates = (products) => {
+    products.forEach((product) => {
+      const { name, inStock } = product;
+
+      // console.log("Processing product:", name, "In stock:", inStock);
+
+      if (isFirstRun) {
+        // Initialize the tracked items on the first run
+        trackedItems.set(name, inStock);
+      } else {
+        if (trackedItems.has(name)) {
+          const previousStatus = trackedItems.get(name);
+
+          // If stock status changed to in stock, add to notification list
+          if (!previousStatus && inStock) {
+            console.log(`Item back in stock: ${name}`);
+            itemsToNotify.push({ name, status: "Back In Stock" });
+          }
+        } else {
+          // New product detected
+          console.log(`New item detected: ${name}`);
+          itemsToNotify.push({ name, status: "New Item" });
+        }
+
+        // Update the tracked items
+        trackedItems.set(name, inStock);
+      }
+    });
+
+    return [...itemsToNotify];
+  };
+
+  // Dummy notifyUsers function
+  const notifyUsers = (items) => {
+    if (items.length === 0) {
+      console.log("No items to notify.");
+      return;
+    }
+
+    console.log("Notifying users about these items: ", items.length, " items");
+
+    // Update the stock status in trackedItems to mark them as processed
+    items.forEach((item) => {
+      trackedItems.set(item.name, true); // Assume item is now in stock after notification
+      console.log(`Marked ${item.name} as processed in trackedItems.`);
+    });
+
+    // Clear itemsToNotify after processing
+    itemsToNotify.length = 0;
+  };
+
+  // Function to perform periodic scans
+  const runPeriodicScan = () => {
+    console.log("Starting a new scan...");
+    const products = scrapeProducts();
+    console.log("products length, ", products.length);
+    console.log("trackedItems length, ", trackedItems.size);
+    const itemsToNotifyThisRound = checkForUpdates(products);
+
+    if (!isFirstRun) {
+      console.log("Items to Notify:", itemsToNotifyThisRound);
+
+      // Call the dummy notifyUsers function to process itemsToNotify
+      notifyUsers(itemsToNotifyThisRound);
+    } else {
+      console.log("First run: Initializing stock status...");
+      isFirstRun = false;
+    }
+
+    setTimeout(runPeriodicScan, period);
+  };
+
+  // Initial run
+  window.addEventListener("load", () => {
+    console.log("Page loaded. Starting stock tracker...");
+    addDebugButtons(); // Add debug buttons on load
+    runPeriodicScan();
+  });
+})();
