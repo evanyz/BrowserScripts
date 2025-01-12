@@ -5,6 +5,7 @@
 // @description  Track product stock changes on Pokemon Center with debug buttons
 // @author       Your Name
 // @match        https://www.pokemoncenter.com/category/elite-trainer-box*
+// @match        https://www.pokemoncenter.com/category/trading-card-game*
 // @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
