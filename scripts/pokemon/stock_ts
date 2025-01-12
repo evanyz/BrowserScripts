@@ -11,13 +11,52 @@
 (function () {
   "use strict";
 
-  const trackedItems = new Map(); // Stores the current stock status of items
+  let trackedItems = new Map(); // Stores the current stock status of items
   const itemsToNotify = []; // Stores new items or items that became in stock
   let isFirstRun = true; // Flag to indicate the first run
   const debugFakeItemName = "Fake Product";
-  const period = 5000;
+  const period = 60000;
   const discordWebhookUrl =
     "https://discord.com/api/webhooks/1327545689533583442/LeqCAyb0vP66R6sZTbLvXxXfO1dquZN5TRN74JNqYrRh7qjBj9vD49HBuTXxGVb6Nig6";
+  const localStorageKey = "pokemonTrackerState";
+
+  // -----------------------------
+  //  1) Load/Store to localStorage, return error
+  // -----------------------------
+  function loadStateFromLocalStorage() {
+    try {
+      const rawState = localStorage.getItem(localStorageKey);
+      if (!rawState) return true;
+
+      const parsed = JSON.parse(rawState);
+      if (parsed && typeof parsed === "object") {
+        if (parsed.isFirstRun !== undefined) {
+          isFirstRun = parsed.isFirstRun;
+        }
+        if (parsed.trackedItemsArray) {
+          // Convert stored array back into a Map
+          trackedItems = new Map(parsed.trackedItemsArray);
+        }
+        return false;
+      }
+    } catch (e) {
+      console.error("Error parsing localStorage state:", e);
+      return true;
+    }
+  }
+
+  function storeStateToLocalStorage() {
+    try {
+      const state = {
+        isFirstRun,
+        // Convert Map to an array so we can serialize in JSON
+        trackedItemsArray: Array.from(trackedItems.entries()),
+      };
+      localStorage.setItem(localStorageKey, JSON.stringify(state));
+    } catch (e) {
+      console.error("Error saving state to localStorage:", e);
+    }
+  }
 
   // Function to scrape product data
   const scrapeProducts = () => {
@@ -121,10 +160,13 @@
 
   // Function to perform periodic scans
   const runPeriodicScan = () => {
+    // console.log("add fake item");
+    // addFakeItem();
+    // console.log("toggle first item stock status");
+    // toggleFirstItem();
+
     console.log("Starting a new scan...");
     const products = scrapeProducts();
-    console.log("products length, ", products.length);
-    console.log("trackedItems length, ", trackedItems.size);
     const itemsToNotifyThisRound = checkForUpdates(products);
 
     if (!isFirstRun) {
@@ -137,9 +179,15 @@
       isFirstRun = false;
     }
 
-    setTimeout(runPeriodicScan, period);
-  };
+    // Store the updated state to localStorage
+    storeStateToLocalStorage();
 
+    // Reload the page after `reloadInterval` ms
+    setTimeout(() => {
+      console.log(`Reloading the page in ${period / 1000} seconds...`);
+      location.reload();
+    }, period);
+  };
   // Function to toggle the stock status of the first item in the map
   const toggleFirstItem = () => {
     const firstItem = Array.from(trackedItems.keys())[0];
@@ -272,7 +320,10 @@
   // Initial run
   window.addEventListener("load", () => {
     console.log("Page loaded. Starting stock tracker...");
-    addDebugButtons(); // Add debug buttons on load
-    runPeriodicScan();
+    const stateLoadingError = loadStateFromLocalStorage();
+    // addDebugButtons(); // Add debug buttons on load
+    if (!stateLoadingError) {
+      runPeriodicScan();
+    }
   });
 })();
