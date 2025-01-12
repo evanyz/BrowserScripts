@@ -14,12 +14,24 @@
 
   let trackedItems = new Map(); // Stores the current stock status of items
   const itemsToNotify = []; // Stores new items or items that became in stock
-  let isFirstRun = true; // Flag to indicate the first run
+  /**
+   * pageStatusLoaded is a map of pageKey -> boolean
+   * indicating if we've done the "first run" for that page or not.
+   */
+  let pageStatusLoaded = new Map();
   const debugFakeItemName = "Fake Product";
   const period = 60000;
   const discordWebhookUrl =
     "https://discord.com/api/webhooks/1327545689533583442/LeqCAyb0vP66R6sZTbLvXxXfO1dquZN5TRN74JNqYrRh7qjBj9vD49HBuTXxGVb6Nig6";
-  const localStorageKey = "pokemonTrackerState";
+  const localStorageKey = "pokemonTrackerState0";
+
+  // Helper to identify the current page.
+  // You could make this more elaborate if needed (e.g., domain + path).
+  function getCurrentPageKey() {
+    // Return both the pathname and the query string (search)
+    // You can optionally add the hash if you want: + window.location.hash
+    return window.location.pathname + window.location.search;
+  }
 
   // -----------------------------
   //  1) Load/Store to localStorage, return error
@@ -27,12 +39,13 @@
   function loadStateFromLocalStorage() {
     try {
       const rawState = localStorage.getItem(localStorageKey);
-      if (!rawState) return true;
+      if (!rawState) return false; // continue with intialized maps
 
       const parsed = JSON.parse(rawState);
       if (parsed && typeof parsed === "object") {
-        if (parsed.isFirstRun !== undefined) {
-          isFirstRun = parsed.isFirstRun;
+        // Recover pageStatusLoaded
+        if (parsed.pageStatusLoadedArray) {
+          pageStatusLoaded = new Map(parsed.pageStatusLoadedArray);
         }
         if (parsed.trackedItemsArray) {
           // Convert stored array back into a Map
@@ -49,7 +62,7 @@
   function storeStateToLocalStorage() {
     try {
       const state = {
-        isFirstRun,
+        pageStatusLoadedArray: Array.from(pageStatusLoaded.entries()),
         // Convert Map to an array so we can serialize in JSON
         trackedItemsArray: Array.from(trackedItems.entries()),
       };
@@ -166,18 +179,17 @@
     // console.log("toggle first item stock status");
     // toggleFirstItem();
 
-    console.log("Starting a new scan...");
+    console.log("Starting a new scan on:", getCurrentPageKey());
     const products = scrapeProducts();
     const itemsToNotifyThisRound = checkForUpdates(products);
 
-    if (!isFirstRun) {
+    if (pageStatusLoaded.get(getCurrentPageKey())) {
       console.log("Items to Notify:", itemsToNotifyThisRound);
 
       // Call the notifyUsers function to process itemsToNotify
       notifyUsers(itemsToNotifyThisRound);
     } else {
       console.log("First run: Initializing stock status...");
-      isFirstRun = false;
     }
 
     // Store the updated state to localStorage
@@ -289,10 +301,13 @@
 
   // Function to check for updates
   const checkForUpdates = (products) => {
+    const currentPageKey = getCurrentPageKey();
+    const isFirstRunForThisPage = !pageStatusLoaded.has(currentPageKey);
+
     products.forEach((product) => {
       const { name, inStock, link, image } = product;
 
-      if (isFirstRun) {
+      if (isFirstRunForThisPage) {
         // Initialize the tracked items on the first run
         trackedItems.set(name, inStock);
       } else {
@@ -314,6 +329,11 @@
         trackedItems.set(name, inStock);
       }
     });
+
+    // Mark that we've done an initial run for this page
+    if (isFirstRunForThisPage) {
+      pageStatusLoaded.set(currentPageKey, true);
+    }
 
     return [...itemsToNotify];
   };
