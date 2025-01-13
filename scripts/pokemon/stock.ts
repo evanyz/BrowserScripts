@@ -9,18 +9,27 @@
 // @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
+/**
+ * https://www.pokemoncenter.com/category/trading-card-game?ps=96&category=S0105-0001-0000%2CS0105-0001-0001%2Cboxed-sets%2CS0105-0001-0007%2CS0105-0001-0002%2CS0105-0001-0003
+https://www.pokemoncenter.com/category/trading-card-game?ps=96&category=S0105-0001-0000%2CS0105-0001-0001%2Cboxed-sets%2CS0105-0001-0007%2CS0105-0001-0002%2CS0105-0001-0003&page=2
+https://www.pokemoncenter.com/category/trading-card-game?ps=96&category=S0105-0001-0000%2CS0105-0001-0001%2Cboxed-sets%2CS0105-0001-0007%2CS0105-0001-0002%2CS0105-0001-0003&page=3
+https://www.pokemoncenter.com/category/trading-card-game?ps=96&category=S0105-0001-0000%2CS0105-0001-0001%2Cboxed-sets%2CS0105-0001-0007%2CS0105-0001-0002%2CS0105-0001-0003&page=4
+ * 
+ */
+
 (function () {
   "use strict";
 
   let trackedItems = new Map(); // Stores the current stock status of items
   const itemsToNotify = []; // Stores new items or items that became in stock
   /**
-   * pageStatusLoaded is a map of pageKey -> boolean
-   * indicating if we've done the "first run" for that page or not.
+   * pageScanCount is a Map: pageKey -> number (how many times we've scanned this page).
+   * 0 means we haven't scanned yet (first load).
+   * If it's 1, that means we've loaded once (on the second load, it becomes 2), etc.
    */
-  let pageStatusLoaded = new Map();
+  let pageScanCount = new Map();
   const debugFakeItemName = "Fake Product";
-  const period = 60000;
+  const period = 5 * 60 * 1000;
   const discordWebhookUrl =
     "https://discord.com/api/webhooks/1327545689533583442/LeqCAyb0vP66R6sZTbLvXxXfO1dquZN5TRN74JNqYrRh7qjBj9vD49HBuTXxGVb6Nig6";
   const localStorageKey = "pokemonTrackerState0";
@@ -43,9 +52,9 @@
 
       const parsed = JSON.parse(rawState);
       if (parsed && typeof parsed === "object") {
-        // Recover pageStatusLoaded
-        if (parsed.pageStatusLoadedArray) {
-          pageStatusLoaded = new Map(parsed.pageStatusLoadedArray);
+        // Recover pageScanCount
+        if (parsed.pageScanCountArray) {
+          pageScanCount = new Map(parsed.pageScanCountArray);
         }
         if (parsed.trackedItemsArray) {
           // Convert stored array back into a Map
@@ -62,7 +71,7 @@
   function storeStateToLocalStorage() {
     try {
       const state = {
-        pageStatusLoadedArray: Array.from(pageStatusLoaded.entries()),
+        pageScanCountArray: Array.from(pageScanCount.entries()),
         // Convert Map to an array so we can serialize in JSON
         trackedItemsArray: Array.from(trackedItems.entries()),
       };
@@ -179,11 +188,17 @@
     // console.log("toggle first item stock status");
     // toggleFirstItem();
 
-    console.log("Starting a new scan on:", getCurrentPageKey());
+    const currentPageKey = getCurrentPageKey();
+    const currentScanCount = pageScanCount.get(currentPageKey) || 0;
+
+    console.log(
+      `Starting scan #${currentScanCount + 1} on page: ${currentPageKey}`
+    );
+
     const products = scrapeProducts();
     const itemsToNotifyThisRound = checkForUpdates(products);
 
-    if (pageStatusLoaded.get(getCurrentPageKey())) {
+    if (currentScanCount >= 1) {
       console.log("Items to Notify:", itemsToNotifyThisRound);
 
       // Call the notifyUsers function to process itemsToNotify
@@ -191,6 +206,9 @@
     } else {
       console.log("First run: Initializing stock status...");
     }
+
+    // Increment the scan count for this page
+    pageScanCount.set(currentPageKey, currentScanCount + 1);
 
     // Store the updated state to localStorage
     storeStateToLocalStorage();
@@ -302,12 +320,14 @@
   // Function to check for updates
   const checkForUpdates = (products) => {
     const currentPageKey = getCurrentPageKey();
-    const isFirstRunForThisPage = !pageStatusLoaded.has(currentPageKey);
+    const currentPageScanCount = pageScanCount.get(currentPageKey) || 0;
+    // If scan count is 0, it's effectively the first load on this page
+    const isFirstLoadForPage = currentPageScanCount === 0;
 
     products.forEach((product) => {
       const { name, inStock, link, image } = product;
 
-      if (isFirstRunForThisPage) {
+      if (isFirstLoadForPage) {
         // Initialize the tracked items on the first run
         trackedItems.set(name, inStock);
       } else {
@@ -329,11 +349,6 @@
         trackedItems.set(name, inStock);
       }
     });
-
-    // Mark that we've done an initial run for this page
-    if (isFirstRunForThisPage) {
-      pageStatusLoaded.set(currentPageKey, true);
-    }
 
     return [...itemsToNotify];
   };
